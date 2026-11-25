@@ -27,7 +27,26 @@ function outputPath(): string {
   return join(dir, "entry.txt");
 }
 
-function main(): void {
+function verify(path: string, data: Buffer): boolean {
+  const back = readFileSync(path);
+  if (back.length !== EXPECTED_BYTES) {
+    console.error(`read-back mismatch: ${back.length} bytes on disk, expected ${EXPECTED_BYTES}`);
+    return false;
+  }
+  const backHash = createHash("sha256").update(back).digest("hex");
+  if (backHash !== EXPECTED_SHA256) {
+    console.error(`read-back mismatch: sha256 ${backHash}, expected ${EXPECTED_SHA256}`);
+    return false;
+  }
+  const decoded = back.toString("utf-8");
+  if (decoded !== data.toString("utf-8")) {
+    console.error("read-back mismatch: decoded text differs from the entry");
+    return false;
+  }
+  return true;
+}
+
+function main(): number {
   const text = LINE + "\n";
   const data = Buffer.from(text, "utf-8");
   if (data.length !== EXPECTED_BYTES) {
@@ -57,19 +76,16 @@ function main(): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, data);
 
-  const back = readFileSync(path);
-  const backHash = createHash("sha256").update(back).digest("hex");
-  if (backHash !== EXPECTED_SHA256 || back.length !== EXPECTED_BYTES) {
-    throw new Error("read-back mismatch: file on disk is not the entry");
-  }
-  const decoded = back.toString("utf-8");
-  if (decoded !== text) {
-    throw new Error("read-back mismatch: decoded text differs");
+  const verified = verify(path, data);
+  if (!verified) {
+    console.error("read-back verification failed");
+    return 1;
   }
 
   console.log(`wrote ${path} (${EXPECTED_BYTES} bytes, ${EXPECTED_CHARS} chars)`);
   console.log(`sha256 ${EXPECTED_SHA256}`);
   console.log("gate: valid (1-140 chars, UTF-8, not only white space)");
+  return 0;
 }
 
-main();
+process.exit(main());
